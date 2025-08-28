@@ -91,7 +91,7 @@ vim.g.mapleader = ' '
 vim.g.maplocalleader = ' '
 
 -- Set to true if you have a Nerd Font installed and selected in the terminal
-vim.g.have_nerd_font = false
+vim.g.have_nerd_font = true
 
 -- [[ Setting options ]]
 -- See `:help vim.o`
@@ -113,6 +113,7 @@ vim.o.showmode = false
 -- Sync clipboard between OS and Neovim.
 --  Schedule the setting after `UiEnter` because it can increase startup-time.
 --  Remove this option if you want your OS clipboard to remain independent.
+--  simonsperling
 --  See `:help 'clipboard'`
 vim.schedule(function()
   vim.o.clipboard = 'unnamedplus'
@@ -205,6 +206,16 @@ vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper win
 -- vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
 -- vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
 
+vim.keymap.set('n', '<leader>o', '<cmd>TSToolsOrganizeImports<CR>', { desc = 'Organize TS imports' })
+vim.keymap.set('n', '<leader>ri', '<cmd>set autoindent expandtab tabstop=2 shiftwidth=2<CR>', {
+  desc = 'Reset indents',
+})
+vim.keymap.set('n', '<leader>re', '<cmd>LspEslintFixAll<CR>', {
+  desc = 'Fix ESLint Errors',
+})
+
+-- vim.cmd 'set autoindent expandtab tabstop=2 shiftwidth=2'
+
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
 
@@ -218,6 +229,100 @@ vim.api.nvim_create_autocmd('TextYankPost', {
     vim.hl.on_yank()
   end,
 })
+
+-- require('night-owl-light.init').colorscheme()
+local function sops()
+  local bufname = vim.api.nvim_buf_get_name(0)
+  if bufname == '' then
+    return
+  end
+
+  local dir = vim.fn.fnamemodify(bufname, ':h')
+  local file = vim.fn.fnamemodify(bufname, ':t')
+
+  if not file:match '.secret' then
+    -- nothing to do if it's not a .secret file
+    return
+  end
+
+  local target, mode
+  if file:match '.decrypted' then
+    target = file:gsub('.decrypted', '')
+    mode = 'e' -- encrypt back
+  else
+    target = file:gsub('.secret', '.secret.decrypted')
+    mode = 'd' -- decrypt
+  end
+
+  local full_src = dir .. '/' .. file
+  local full_target = dir .. '/' .. target
+
+  -- Run sops; using shellescape to be safe for spaces etc.
+  local cmd = string.format('cd %s && sops -%s %s > %s', vim.fn.shellescape(dir), mode, vim.fn.shellescape(file), vim.fn.shellescape(target))
+
+  -- You can do this synchronously:
+  vim.cmd('silent! !' .. cmd)
+
+  vim.cmd('edit ' .. vim.fn.fnameescape(full_target))
+end
+
+vim.keymap.set('n', '<leader>ü', sops, { desc = 'SOPS Decrypt/Encrypt' })
+
+vim.keymap.set('n', '<leader>dcd', '<cmd>!comp down<CR>', { desc = 'Docker compose down' })
+vim.keymap.set('n', '<leader>dcu', '<cmd>!comp up -d<CR>', { desc = 'Docker compose up' })
+
+vim.keymap.set('n', '<leader>tn', '<cmd>tabnew<CR>', { desc = 'Open new tab' })
+
+vim.keymap.set('n', '<leader>cp', function()
+  local relative_filepath = vim.fn.expand '%:.'
+  vim.fn.setreg('*', relative_filepath)
+end, { desc = 'Copy relative file path' })
+
+vim.keymap.set('n', '<A-j>', ':m .+1<CR>==', { desc = 'move line up(n)' })
+vim.keymap.set('n', '<A-k>', ':m .-2<CR>==', { desc = 'move line down(n)' })
+vim.keymap.set('v', '<A-j>', ":m '>+1<CR>gv=gv", { desc = 'move line up(v)' })
+vim.keymap.set('v', '<A-k>', ":m '<-2<CR>gv=gv", { desc = 'move line down(v)' })
+
+vim.keymap.set('x', '<leader>rr', function()
+  -- Yank selection into register z
+  vim.cmd 'normal! "zy'
+  local pattern = vim.fn.escape(vim.fn.getreg 'z', '/\\.*$^~[]')
+
+  -- Build :%s/pattern//gc
+  local cmd = ':%s/\\(' .. pattern .. '\\)//gc'
+
+  -- Feed it, then move cursor left 3 times to land between the slashes
+  vim.api.nvim_feedkeys(cmd .. string.rep(vim.api.nvim_replace_termcodes('<Left>', true, false, true), 3), 'n', false)
+end, { desc = 'Prepopulate substitute with visual selection' })
+
+vim.keymap.set('x', '<leader>rt', function()
+  -- Yank selection
+  vim.cmd 'normal! "zy'
+  local pattern = vim.fn.escape(vim.fn.getreg 'z', '/\\.*$^~[]')
+
+  -- Prepopulate :%s/pattern/
+  vim.api.nvim_feedkeys(':%s/' .. pattern .. '/', 'n', false)
+end, { desc = 'Prepopulate substitute with visual selection' })
+
+-- Simple transformation: replace "foo" with "bar"
+local function replace_word_transform(cmd)
+  return cmd:gsub('backend/', '')
+end
+
+-- Expose it so vim-test can call it
+-- vim-test expects a Vimscript-callable function; use luaeval to wrap
+_G._vimtest_replace_word = replace_word_transform
+vim.g['test#custom_transformations'] = {
+  simple = vim.fn.luaeval 'function(cmd) return _G._vimtest_replace_word(cmd) end',
+}
+vim.g['test#transformation'] = 'simple'
+vim.g['test#php#phpunit#executable'] = 'docker compose exec php bin/phpunit'
+
+vim.keymap.set('n', '<leader>kr', ':TestNearest<CR>', { desc = 'Run nearest test' })
+vim.keymap.set('n', '<leader>kf', ':TestFile<CR>', { desc = 'Run file tests' })
+vim.keymap.set('n', '<leader>ks', ':TestSuite<CR>', { desc = 'Run test suite' })
+vim.keymap.set('n', '<leader>kp', ':TestLast<CR>', { desc = 'Run last test' })
+vim.keymap.set('n', '<leader>kv', ':TestVisit<CR>', { desc = 'Visit last test file' })
 
 -- [[ Install `lazy.nvim` plugin manager ]]
 --    See `:help lazy.nvim.txt` or https://github.com/folke/lazy.nvim for more info
@@ -234,6 +339,22 @@ end
 local rtp = vim.opt.rtp
 rtp:prepend(lazypath)
 
+local prettier_config_file_names = {
+  -- https://prettier.io/docs/en/configuration.html
+  '.prettierrc',
+  '.prettierrc.json',
+  '.prettierrc.yml',
+  '.prettierrc.yaml',
+  '.prettierrc.json5',
+  '.prettierrc.js',
+  '.prettierrc.cjs',
+  '.prettierrc.mjs',
+  '.prettierrc.toml',
+  'prettier.config.js',
+  'prettier.config.cjs',
+  'prettier.config.mjs',
+}
+
 -- [[ Configure and install plugins ]]
 --
 --  To check the current status of your plugins, run
@@ -245,6 +366,7 @@ rtp:prepend(lazypath)
 --    :Lazy update
 --
 -- NOTE: Here is where you install your plugins.
+-- local util = require("stevearc/conform.nvim.util")
 require('lazy').setup({
   -- NOTE: Plugins can be added with a link (or for a github repo: 'owner/repo' link).
   'NMAC427/guess-indent.nvim', -- Detect tabstop and shiftwidth automatically
@@ -412,7 +534,48 @@ require('lazy').setup({
         --     i = { ['<c-enter>'] = 'to_fuzzy_refine' },
         --   },
         -- },
+        defaults = {
+          layout_strategy = 'vertical',
+          layout_config = {
+            vertical = {
+              preview_cutoff = 0,
+              prompt_position = 'top',
+              mirror = true,
+            },
+          },
+          hidden = false,
+          no_ignore = false,
+          file_ignore_patterns = {
+            'node_modules',
+          },
+        },
         -- pickers = {}
+        pickers = {
+          live_grep = {
+            -- additional_args = function(_)
+            --   return { '-uu' }
+            -- end,
+            hidden = false,
+            no_ignore = false,
+            file_ignore_patterns = {
+              'node_modules',
+            },
+          },
+          grep_string = {
+            hidden = false,
+            no_ignore = true,
+            file_ignore_patterns = {
+              'node_modules',
+            },
+          },
+          find_files = {
+            hidden = false,
+            no_ignore = false,
+            file_ignore_patterns = {
+              'node_modules',
+            },
+          },
+        },
         extensions = {
           ['ui-select'] = {
             require('telescope.themes').get_dropdown(),
@@ -478,6 +641,9 @@ require('lazy').setup({
   {
     -- Main LSP Configuration
     'neovim/nvim-lspconfig',
+    opts = {
+      inlay_hints = { enabled = true },
+    },
     dependencies = {
       -- Automatically install LSPs and related tools to stdpath for Neovim
       -- Mason must be loaded before its dependents so we need to set it up here.
@@ -485,6 +651,7 @@ require('lazy').setup({
       { 'mason-org/mason.nvim', opts = {} },
       'mason-org/mason-lspconfig.nvim',
       'WhoIsSethDaniel/mason-tool-installer.nvim',
+      { 'qvalentin/helm-ls.nvim', ft = 'helm' },
 
       -- Useful status updates for LSP.
       { 'j-hui/fidget.nvim', opts = {} },
@@ -671,8 +838,21 @@ require('lazy').setup({
       --  - settings (table): Override the default settings passed when initializing the server.
       --        For example, to see the options for `lua_ls`, you could go to: https://luals.github.io/wiki/settings/
       local servers = {
+        intelephense = {},
+        angularls = {},
+        eslint = {},
+        helm_ls = {
+          settings = {
+            ['helm-ls'] = {
+              yamlls = {
+                path = 'yaml-language-server',
+              },
+            },
+          },
+        },
+        terraformls = {},
         -- clangd = {},
-        -- gopls = {},
+        gopls = {},
         -- pyright = {},
         -- rust_analyzer = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
@@ -735,6 +915,11 @@ require('lazy').setup({
       }
     end,
   },
+  {
+    'pmizio/typescript-tools.nvim',
+    dependencies = { 'nvim-lua/plenary.nvim', 'neovim/nvim-lspconfig' },
+    opts = {},
+  },
 
   { -- Autoformat
     'stevearc/conform.nvim',
@@ -761,19 +946,54 @@ require('lazy').setup({
           return nil
         else
           return {
-            timeout_ms = 500,
+            timeout_ms = 1500,
             lsp_format = 'fallback',
           }
         end
       end,
       formatters_by_ft = {
         lua = { 'stylua' },
+        php = { 'php_cs_fixer' },
         -- Conform can also run multiple formatters sequentially
         -- python = { "isort", "black" },
         --
         -- You can use 'stop_after_first' to run the first available formatter from the list
         -- javascript = { "prettierd", "prettier", stop_after_first = true },
+        javascript = { 'prettierd', stop_after_first = true },
+        typescript = { 'prettierd', stop_after_first = true },
+        htmlangular = { 'prettierd' },
+        scss = { 'prettierd' },
+        go = { 'gofmt' },
       },
+      formatters = {
+        prettier = {
+          command = 'yarn',
+          args = { 'exec', 'prettier', '$FILENAME' },
+          cwd = function(self, ctx)
+            return vim.fs.root(ctx.dirname, function(name, path)
+              if vim.tbl_contains(prettier_config_file_names, name) then
+                return true
+              end
+
+              -- if name == "package.json" then
+              --   local full_path = vim.fs.joinpath(path, name)
+              --   local package_data = read_json(full_path)
+              --   return package_data and package_data.prettier and true or false
+              -- end
+
+              return false
+            end)
+          end,
+        },
+      },
+      -- formatters = {
+      --   prettier_local = {
+      --     util.find_executable({
+      --       ".yarn/sdks/prettier/index.cjs",
+      --       "node_modules/bin/prettier",
+      --     }, "prettier")
+      --   },
+      -- },
     },
   },
 
@@ -835,7 +1055,7 @@ require('lazy').setup({
         -- <c-k>: Toggle signature help
         --
         -- See :h blink-cmp-config-keymap for defining your own keymap
-        preset = 'default',
+        preset = 'enter',
 
         -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
         --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
@@ -889,6 +1109,80 @@ require('lazy').setup({
         styles = {
           comments = { italic = false }, -- Disable italics in comments
         },
+        on_colors = function(colors)
+          -- colors.bg = '#FBFBFB'
+          -- colors.bg_dark = '#F6F6F6'
+          -- colors.bg_dark1 = '#F0F0F0'
+          -- colors.bg_float = '#F6F6F6'
+          -- colors.bg_highlight = '#F0F0F0'
+          -- colors.bg_popup = '#F6F6F6'
+          -- colors.bg_search = '#cde8ff'
+          -- colors.bg_sidebar = '#F6F6F6'
+          -- colors.bg_statusline = '#F6F6F6'
+          -- colors.bg_visual = '#283457'
+          -- colors.black = '#15161e'
+          -- colors.blue = '#4876d6'
+          -- colors.blue0 = '#cde8ff'
+          -- colors.blue1 = '#288ed7'
+          -- colors.blue2 = '#0db9d7'
+          -- colors.blue5 = '#2AA298'
+          -- colors.blue6 = '#b4f9f8'
+          -- colors.blue7 = '#394b70'
+          -- colors.border = '#15161e'
+          -- colors.border_highlight = '#27a1b9'
+          -- colors.comment = '#565f89'
+          -- colors.cyan = '#994cc3'
+          -- colors.dark3 = '#545c7e'
+          -- colors.dark5 = '#737aa2'
+          -- colors.diff.add = '#20303b'
+          -- colors.diff.change = '#1f2231'
+          -- colors.diff.delete = '#37222c'
+          -- colors.diff.text = '#394b70'
+          -- colors.error = '#E64D49'
+          -- colors.fg = '#403f53'
+          -- colors.fg_dark = '#90A7B2'
+          -- colors.fg_float = 'red'
+          -- colors.fg_gutter = '#90A7B2'
+          -- colors.fg_sidebar = '#90A7B2'
+          -- colors.git.add = '#449dab'
+          -- colors.git.change = '#6183bb'
+          -- colors.git.delete = '#914c54'
+          -- colors.git.ignore = '#545c7e'
+          -- colors.green = '#bc5454'
+          -- colors.green1 = '#73daca'
+          -- colors.green2 = '#41a6b5'
+          -- colors.hint = '#1abc9c'
+          -- colors.info = '#0db9d7'
+          -- colors.magenta = '#994cc3'
+          -- colors.magenta2 = '#ff007c'
+          -- colors.none = 'NONE'
+          -- colors.orange = '#49d0c5'
+          -- colors.purple = '#994cc3'
+          -- colors.rainbow = { '#4876d6', '#e0af68', '#bc5454', '#1abc9c', '#994cc3', '#994cc3', '#ff9e64', '#403f53' }
+          -- colors.red = '#403f53'
+          -- colors.red1 = '#E64D49'
+          -- colors.teal = '#1abc9c'
+          -- colors.terminal.black = '#15161e'
+          -- colors.terminal.black_bright = '#414868'
+          -- colors.terminal.blue = '#4876d6'
+          -- colors.terminal.blue_bright = '#8db0ff'
+          -- colors.terminal.cyan = '#994cc3'
+          -- colors.terminal.cyan_bright = '#a4daff'
+          -- colors.terminal.green = '#bc5454'
+          -- colors.terminal.green_bright = '#9fe044'
+          -- colors.terminal.magenta = '#994cc3'
+          -- colors.terminal.magenta_bright = '#994cc3'
+          -- colors.terminal.red = '#403f53'
+          -- colors.terminal.red_bright = '#ff899d'
+          -- colors.terminal.white = '#90A7B2'
+          -- colors.terminal.white_bright = 'red'
+          -- colors.terminal.yellow = '#e0af68'
+          -- colors.terminal.yellow_bright = '#faba4a'
+          -- colors.terminal_black = '#414868'
+          -- colors.todo = '#4876d6'
+          -- colors.warning = '#daaa01'
+          -- colors.yellow = '#daaa01'
+        end,
       }
 
       -- Load the colorscheme here.
@@ -963,6 +1257,29 @@ require('lazy').setup({
     --    - Show your current context: https://github.com/nvim-treesitter/nvim-treesitter-context
     --    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
   },
+  {
+    'vim-test/vim-test',
+  },
+  {
+    'nvim-neotest/neotest',
+    lazy = true,
+    dependencies = {
+      'olimorris/neotest-phpunit',
+      'nvim-neotest/nvim-nio',
+    },
+    config = function()
+      require('neotest').setup {
+        adapters = {
+          require 'neotest-phpunit' {
+            root_files = { 'bitbucket-pipelines.yml' },
+            phpunit_cmd = function()
+              return { 'docker', 'compose', 'exec', 'php', 'bin/phpunit' }
+            end,
+          },
+        },
+      }
+    end,
+  },
 
   -- The following comments only work if you have downloaded the kickstart repo, not just copy pasted the
   -- init.lua. If you want these files, they are in the repository, so you can just download them and
@@ -975,9 +1292,9 @@ require('lazy').setup({
   --
   -- require 'kickstart.plugins.debug',
   -- require 'kickstart.plugins.indent_line',
-  -- require 'kickstart.plugins.lint',
+  require 'kickstart.plugins.lint',
   -- require 'kickstart.plugins.autopairs',
-  -- require 'kickstart.plugins.neo-tree',
+  require 'kickstart.plugins.neo-tree',
   -- require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
 
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`

@@ -11,13 +11,20 @@ return {
   },
   lazy = false,
   keys = {
-    { '\\', ':Neotree reveal<CR>', desc = 'NeoTree reveal', silent = true },
+    { '<leader>b', ':Neotree reveal<CR>', desc = 'NeoTree reveal', silent = true },
   },
   opts = {
     filesystem = {
+      filtered_items = {
+        visible = true,
+        never_show = {
+          '.DS_Store',
+          '.git',
+        },
+      },
       window = {
         mappings = {
-          ['\\'] = 'close_window',
+          ['<leader>b'] = 'close_window',
         },
       },
     },
