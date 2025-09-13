@@ -102,7 +102,7 @@ vim.g.have_nerd_font = true
 vim.o.number = true
 -- You can also add relative line numbers, to help with jumping.
 --  Experiment for yourself to see if you like it!
--- vim.o.relativenumber = true
+vim.o.relativenumber = true
 
 -- Enable mouse mode, can be useful for resizing splits for example!
 vim.o.mouse = 'a'
@@ -206,7 +206,7 @@ vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper win
 -- vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
 -- vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
 
-vim.keymap.set('n', '<leader>o', '<cmd>TSToolsOrganizeImports<CR>', { desc = 'Organize TS imports' })
+vim.keymap.set('n', '<leader>ot', '<cmd>TSToolsOrganizeImports<CR>', { desc = '[O]rganize [T]S imports' })
 vim.keymap.set('n', '<leader>ri', '<cmd>set autoindent expandtab tabstop=2 shiftwidth=2<CR>', {
   desc = 'Reset indents',
 })
@@ -271,6 +271,12 @@ vim.keymap.set('n', '<leader>ü', sops, { desc = 'SOPS Decrypt/Encrypt' })
 vim.keymap.set('n', '<leader>dcd', '<cmd>!comp down<CR>', { desc = 'Docker compose down' })
 vim.keymap.set('n', '<leader>dcu', '<cmd>!comp up -d<CR>', { desc = 'Docker compose up' })
 
+vim.keymap.set('x', '<leader>p', '"_dP', { desc = 'Paste without loosing yank' })
+vim.keymap.set('n', '<C-d>', '<C-d>zz')
+vim.keymap.set('n', '<C-u>', '<C-u>zz')
+vim.keymap.set('n', '<C-f>', '<C-f>zz')
+vim.keymap.set('n', '<C-b>', '<C-b>zz')
+
 vim.keymap.set('n', '<leader>tn', '<cmd>tabnew<CR>', { desc = 'Open new tab' })
 
 vim.keymap.set('n', '<leader>cp', function()
@@ -283,6 +289,33 @@ vim.keymap.set('n', '<A-k>', ':m .-2<CR>==', { desc = 'move line down(n)' })
 vim.keymap.set('v', '<A-j>', ":m '>+1<CR>gv=gv", { desc = 'move line up(v)' })
 vim.keymap.set('v', '<A-k>', ":m '<-2<CR>gv=gv", { desc = 'move line down(v)' })
 
+vim.keymap.set('n', '-', '<CMD>Oil<CR>', { desc = 'Open parent directory' })
+
+vim.keymap.set('n', '<leader>ew', ':e ~/Desktop/worklogs.txt<CR>', { desc = '[E]dit [W]ork Logs' })
+vim.keymap.set('n', '<leader>eh', ':e ~/.hammerspoon/init.lua<CR>', { desc = '[E]dit [H]ammerspoon config' })
+vim.keymap.set('n', '<leader>of', ':!open -R ./<CR>', { desc = '[O]pen [F]inder' })
+vim.keymap.set('n', '<leader>db', function()
+  require('dap').toggle_breakpoint()
+end, { desc = 'Toggle Breakpoint' })
+vim.keymap.set('n', '<leader>ds', function()
+  require('dap').continue()
+end, { desc = 'Continue' })
+vim.keymap.set('n', '<leader>dC', function()
+  require('dap').run_to_cursor()
+end, { desc = 'Run to Cursor' })
+vim.keymap.set('n', '<leader>dT', function()
+  require('dap').terminate()
+end, { desc = 'Terminate' })
+vim.keymap.set('n', '<leader>du', function()
+  require('dapui').toggle {}
+end, { desc = 'Toggle Debug UI' })
+
+vim.keymap.set('n', '<leader>sG', function()
+  local cmd = ':Telescope live_grep search_dirs={""}'
+
+  -- Feed it, then move cursor left 3 times to land between the slashes
+  vim.api.nvim_feedkeys(cmd .. string.rep(vim.api.nvim_replace_termcodes('<Left>', true, false, true), 2), 'n', false)
+end, { desc = '[S]earch Live Grep with ar[G]s' })
 vim.keymap.set('x', '<leader>rr', function()
   -- Yank selection into register z
   vim.cmd 'normal! "zy'
@@ -485,6 +518,7 @@ require('lazy').setup({
     event = 'VimEnter',
     dependencies = {
       'nvim-lua/plenary.nvim',
+      'debugloop/telescope-undo.nvim',
       { -- If encountering errors, see telescope-fzf-native README for installation instructions
         'nvim-telescope/telescope-fzf-native.nvim',
 
@@ -580,12 +614,21 @@ require('lazy').setup({
           ['ui-select'] = {
             require('telescope.themes').get_dropdown(),
           },
+          undo = {
+            -- telescope-undo.nvim config, see below
+            side_by_side = true,
+            layout_strategy = 'vertical',
+            layout_config = {
+              preview_height = 0.8,
+            },
+          },
         },
       }
 
       -- Enable Telescope extensions if they are installed
       pcall(require('telescope').load_extension, 'fzf')
       pcall(require('telescope').load_extension, 'ui-select')
+      pcall(require('telescope').load_extension, 'undo')
 
       -- See `:help telescope.builtin`
       local builtin = require 'telescope.builtin'
@@ -599,6 +642,7 @@ require('lazy').setup({
       vim.keymap.set('n', '<leader>sr', builtin.resume, { desc = '[S]earch [R]esume' })
       vim.keymap.set('n', '<leader>s.', builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
       vim.keymap.set('n', '<leader><leader>', builtin.buffers, { desc = '[ ] Find existing buffers' })
+      vim.keymap.set('n', '<leader>u', '<cmd>Telescope undo<cr>', { desc = 'Open [U]ndo tree' })
 
       -- Slightly advanced example of overriding default behavior and theme
       vim.keymap.set('n', '<leader>/', function()
@@ -916,6 +960,65 @@ require('lazy').setup({
     end,
   },
   {
+    'mfussenegger/nvim-dap',
+    {
+      'jay-babu/mason-nvim-dap.nvim',
+      opts = {
+
+        -- Makes a best effort to setup the various debuggers with
+        -- reasonable debug configurations
+        automatic_setup = true,
+
+        -- You can provide additional configuration to the handlers,
+        -- see mason-nvim-dap README for more information
+        handlers = {
+          function(config)
+            require('mason-nvim-dap').default_setup(config)
+          end,
+          php = function(config)
+            local dockerFolder = ''
+            local localFolder = ''
+            if string.find(vim.fn.getcwd(), 'sh-app') then
+              dockerFolder = '/app/backend'
+              localFolder = vim.fn.getcwd() .. '/backend'
+            end
+
+            config.configurations = {
+              {
+                type = 'php',
+                request = 'launch',
+                name = 'Listen for XDebug',
+                port = 9003,
+                log = true,
+                pathMappings = {
+                  ['/app/backend'] = vim.fn.getcwd() .. '/backend',
+                },
+                hostname = '0.0.0.0',
+              },
+            }
+
+            require('mason-nvim-dap').default_setup(config) -- don't forget this!
+          end,
+        },
+
+        -- You'll need to check that you have the required things installed
+        -- online, please don't ask me how to install them :)
+        ensure_installed = {
+          -- Update this to ensure that you have the debuggers for the langs you want
+          'delve',
+        },
+      },
+    },
+  },
+  {
+    'theHamsta/nvim-dap-virtual-text',
+    config = true,
+    dependencies = {
+      'mfussenegger/nvim-dap',
+    },
+  },
+  { 'rcarriga/nvim-dap-ui', dependencies = { 'mfussenegger/nvim-dap', 'nvim-neotest/nvim-nio' }, opts = {} },
+  {
     'pmizio/typescript-tools.nvim',
     dependencies = { 'nvim-lua/plenary.nvim', 'neovim/nvim-lspconfig' },
     opts = {},
@@ -1196,7 +1299,7 @@ require('lazy').setup({
   { 'folke/todo-comments.nvim', event = 'VimEnter', dependencies = { 'nvim-lua/plenary.nvim' }, opts = { signs = false } },
 
   { -- Collection of various small independent plugins/modules
-    'echasnovski/mini.nvim',
+    'nvim-mini/mini.nvim',
     config = function()
       -- Better Around/Inside textobjects
       --
@@ -1256,6 +1359,21 @@ require('lazy').setup({
     --    - Incremental selection: Included, see `:help nvim-treesitter-incremental-selection-mod`
     --    - Show your current context: https://github.com/nvim-treesitter/nvim-treesitter-context
     --    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
+  },
+  {
+    'stevearc/oil.nvim',
+    opts = {},
+    -- Optional dependencies
+    dependencies = { 'nvim-tree/nvim-web-devicons' }, -- use if you prefer nvim-web-devicons
+    -- Lazy loading is not recommended because it is very tricky to make it work correctly in all situations.
+    lazy = false,
+    config = function()
+      require('oil').setup {
+        view_options = {
+          show_hidden = true,
+        },
+      }
+    end,
   },
   {
     'vim-test/vim-test',
